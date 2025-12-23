@@ -1,23 +1,16 @@
 import express from 'express'
+import pkg from '@prisma/client';
+const { PrismaClient } = pkg;
 
 const app = express()
+const prisma = new PrismaClient()
 
 app.get('/', (req, res) => {
     res.send('Hello, this is my server web point for my journal backend!!!!!!')});
 
-app.get('/entries', (req, res) => {
-    res.json(([
-        {
-            id: 1, 
-            title: "First Entry",
-            content: "This is my first journal entry."
-        },
-        {
-            id: 2,
-            title: "Second Entry",
-            content: "This is my second journal entry."
-        }
-    ]))
+app.get('/entries', async (req, res) => {
+    const entries = await prisma.journalEntry.findMany()
+    res.json(entries)
 })
 
 app.listen(4000, () => {
