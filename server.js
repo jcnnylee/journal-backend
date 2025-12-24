@@ -1,5 +1,8 @@
 import express from 'express'
 import 'dotenv/config'
+import bcrypt from 'bcrypt'
+
+// Imported these modules because I kept getting an error with Prisma when trying to run the backend server
 import { createRequire } from 'module'
 const require = createRequire(import.meta.url)
 const { PrismaClient } = require('./generated/prisma')
@@ -8,6 +11,7 @@ const { PrismaPg } = require('@prisma/adapter-pg')
 import cors from 'cors'
 
 const app = express()
+
 const adapter = new PrismaPg({ connectionString: process.env.DATABASE_URL })
 const prisma = new PrismaClient({ adapter })
 
@@ -23,6 +27,37 @@ app.use(cors( {
         'DELETE'],
     credentials: true,
 } )) 
+
+// Creates a POST endpoint that registers a new user using a unique email and a hashed password
+app.post("/register", async (req, res) => {
+
+    try {
+        const {email, password} = req.body
+        const existingUser = await prisma.user.findUnique({ 
+            where: {email: email},
+
+    })
+    if (existingUser) {
+        return res.status(400).json({ 
+            error: "Email already registered!" 
+        })
+    }
+
+        const hashedPassword = await bcrypt.hash(password, 10) 
+        const user = await prisma.user.create({
+        data: {
+            email: email,
+            password: hashedPassword,
+        }
+    }) 
+    res.status(201).json(user)
+    } catch (error) {
+        res.status(500).json({ 
+            error: "There is an error with the server!", 
+            details: String(error) 
+        })
+    }
+})
 
 app.get('/', (req, res) => {
     res.send('Hello, this is my server web point for my journal backend!!!!!!')});

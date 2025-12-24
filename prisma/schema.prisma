@@ -13,10 +13,18 @@ datasource db {
   provider = "postgresql"
 }
 
+// JournalEntry model to store the journal entries
 model JournalEntry {
   id        Int      @id @default(autoincrement())
   title     String
   content   String
   createdAt DateTime @default(now())
   updatedAt DateTime @default(now())
+}
+
+// User model to store user information (add_user_model)
+model User {
+  id       Int    @id @default(autoincrement())
+  email    String @unique //dont want multiple users with the same email
+  password String
 }
