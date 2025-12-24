@@ -5,11 +5,24 @@ const require = createRequire(import.meta.url)
 const { PrismaClient } = require('./generated/prisma')
 const { PrismaPg } = require('@prisma/adapter-pg')
 
+import cors from 'cors'
+
 const app = express()
 const adapter = new PrismaPg({ connectionString: process.env.DATABASE_URL })
 const prisma = new PrismaClient({ adapter })
 
 app.use(express.json())
+
+// CORS middleware to allow requests from the frontend
+app.use(cors( {
+    origin: 'http://localhost:5173',
+    methods: [
+        'GET', 
+        'POST', 
+        'PUT', 
+        'DELETE'],
+    credentials: true,
+} )) 
 
 app.get('/', (req, res) => {
     res.send('Hello, this is my server web point for my journal backend!!!!!!')});
