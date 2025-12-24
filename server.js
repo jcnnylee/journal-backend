@@ -1,5 +1,5 @@
 import express from 'express'
-import 'dotenv/config'
+import dotenv from 'dotenv'
 import cors from 'cors'
 
 // Authentication imports
@@ -12,11 +12,14 @@ const require = createRequire(import.meta.url)
 const { PrismaClient } = require('./generated/prisma')
 const { PrismaPg } = require('@prisma/adapter-pg')
 
+dotenv.config()
+
 const app = express()
 
 const adapter = new PrismaPg({ connectionString: process.env.DATABASE_URL })
 const prisma = new PrismaClient({ adapter })
 
+const secret = process.env.JWT_SECRET
 app.use(express.json())
 
 // CORS middleware to allow requests from the frontend
@@ -29,6 +32,9 @@ app.use(cors( {
         'DELETE'],
     credentials: true,
 } )) 
+
+app.get('/', (req, res) => {
+    res.send('Hello, this is my server web point for my journal backend!!!!!!')});
 
 // Creates a POST endpoint that registers a new user using a unique email and a hashed password
 app.post("/register", async (req, res) => {
@@ -62,7 +68,7 @@ app.post("/register", async (req, res) => {
 })
 
 app.post("/login", async (req, res) => {
-    
+
         const { email, password } = req.body
         // Checks if the user exists in the database
         const user = await prisma.user.findUnique({ 
@@ -84,26 +90,67 @@ app.post("/login", async (req, res) => {
         }
 
         // Generates a JWT token for user
-        const token = jwt.sign({userId: user.id}, 'SECRET_KEY__1234', { expiresIn: '1hr'})
+        const token = jwt.sign({userId: user.id}, secret, { expiresIn: '1hr'})
         res.json({token})
 })
 
-app.get('/', (req, res) => {
-    res.send('Hello, this is my server web point for my journal backend!!!!!!')});
+// MIDDLEWARE
+function authMiddleware(req, res, next) {
+    const authHeader = req.headers.authorization
+
+    if (!authHeader) {
+        return res.status(401).json({ 
+            error: "No token found!" 
+        })
+    }
+    //split into an array 
+    // ex: [Token, 123919343]
+    try {
+        const token = authHeader.split(' ')[1]
+        const decoded = jwt.verify(token, secret)
+        req.user = decoded
+        next()
+    } catch (error) {
+        console.log(error)
+        res.status(401).json({ 
+            error: "Invalid token!" 
+        })
+    }
+}
+// a GET endpoint that returns an existing user's information
+app.get('/me', authMiddleware, async (req, res) => {
+    const userId = req.user.userId
+    console.log(req.user)
+    const user = await prisma.user.findUnique({
+        where: { id: userId },
+    })
+    res.json(user)
+})
 
 // Creates a GET endpoint for all the journal entries 
-app.get('/entries', async (req, res) => {
-    const entries = await prisma.journalEntry.findMany()
+app.get('/entries', authMiddleware, async (req, res) => {
+    const {userId} = req.user
+    const entries = await prisma.journalEntry.findMany({
+        where: {userId: userId}
+    })
     res.json(entries)
 })
 
 // GET endpoint to get the single journal entry
-app.get('/entries/:id', async (req, res) => {
-  const id = Number(req.params.id);
+app.get('/entries/:id', authMiddleware, async (req, res) => {
+  const id = Number(req.params.id)
+  const userId = req.user.userId
+
   try {
     const entry = await prisma.journalEntry.findUnique({ 
         where: { id } 
     })
+
+    // Other users cannot see another users entries
+    if (!entries || entries.userId !== userId) {
+        return res.status(404).json({error: "Task not found"})
+    }
+
     res.json(entry)
   } catch (error) {
     res.status(404).json({ 
@@ -113,8 +160,10 @@ app.get('/entries/:id', async (req, res) => {
 })
 
 // Creates a post endpoint to add a new journal entry
-app.post('/entries', async (req, res) => {
-  const { title, content } = req.body;
+app.post('/entries', authMiddleware, async (req, res) => {
+  const { title, content } = req.body
+  const userId = req.user.userId
+
   if (!title || !content) 
     return res.status(400).json({ 
         error: 'Title and content are required' 
@@ -123,23 +172,34 @@ app.post('/entries', async (req, res) => {
   const entry = await prisma.journalEntry.create({ 
     data: { 
         title, 
-        content } 
+        content,
+        userId,
+    } 
     })
-  res.status(201).json(entry);
+  res.status(201).json(entry)
 })
 
 // PUT endpoint to update an journal entry that already exists
-app.put('/entries/:id', async (req, res) => {
-  const id = Number(req.params.id);
-  const { title, content } = req.body;
+app.put('/entries/:id', authMiddleware, async (req, res) => {
+  const id = Number(req.params.id)
+  const { title, content } = req.body
+  const userId = req.user.userId
 
   try {
+    const existingEntry = await prisma.journalEntry.findUnique({where: {id}})
+    if (!existingEntry || existingEntry.userId !== userId) {
+        return res.status(404).json({ error: "Task not found!"})
+    }
     const entry = await prisma.journalEntry.update({
       where: { id },
-      data: { title, content },
+      data: { 
+        title, 
+        content,
+        userId
+    },
 
     })
-    res.json(entry);
+    res.json(entry)
     } catch (error) {
     res.status(404).json({ 
         error: 'The entry cannot be found!' 
@@ -148,14 +208,19 @@ app.put('/entries/:id', async (req, res) => {
 })
 
 // DELETE endpoint to delete a journal entry
-app.delete('/entries/:id', async (req, res) => {
-  const id = Number(req.params.id);
+app.delete('/entries/:id', authMiddleware, async (req, res) => {
+  const id = Number(req.params.id)
+  const userId = req.user.userId
+
   try {
-    await prisma.journalEntry.delete({ 
-        where: { id } 
+    const existingEntry = await prisma.journalEntry.findUnique({where: {id}})
+    if (!existingEntry || existingEntry.userId !== userId) {
+        return res.status(404).json({ error: "Task not found!"})
+    }
+    await prisma.journalEntry.delete({
+        where: {id},
     })
-    res.status(204).send()
-  } catch (error) {
+    } catch (error) {
     res.status(404).json({ 
         error: 'The entry cannot be found!' 
     })
