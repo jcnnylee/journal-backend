@@ -147,7 +147,7 @@ app.get('/entries/:id', authMiddleware, async (req, res) => {
     })
 
     // Other users cannot see another users entries
-    if (!entries || entries.userId !== userId) {
+    if (!entry || entry.userId !== userId) {
         return res.status(404).json({error: "Task not found"})
     }
 
@@ -159,9 +159,9 @@ app.get('/entries/:id', authMiddleware, async (req, res) => {
   }
 })
 
-// Creates a post endpoint to add a new journal entry
+// Creates a post endpoint to add a new journal entry with title, content, and mood field
 app.post('/entries', authMiddleware, async (req, res) => {
-  const { title, content } = req.body
+  const { title, content, mood } = req.body
   const userId = req.user.userId
 
   if (!title || !content) 
@@ -173,6 +173,7 @@ app.post('/entries', authMiddleware, async (req, res) => {
     data: { 
         title, 
         content,
+        mood,
         userId,
     } 
     })
@@ -182,7 +183,7 @@ app.post('/entries', authMiddleware, async (req, res) => {
 // PUT endpoint to update an journal entry that already exists
 app.put('/entries/:id', authMiddleware, async (req, res) => {
   const id = Number(req.params.id)
-  const { title, content } = req.body
+  const { title, content, mood } = req.body
   const userId = req.user.userId
 
   try {
@@ -195,6 +196,7 @@ app.put('/entries/:id', authMiddleware, async (req, res) => {
       data: { 
         title, 
         content,
+        mood,
         userId
     },
 
@@ -220,6 +222,7 @@ app.delete('/entries/:id', authMiddleware, async (req, res) => {
     await prisma.journalEntry.delete({
         where: {id},
     })
+    res.status(204).send()
     } catch (error) {
     res.status(404).json({ 
         error: 'The entry cannot be found!' 
